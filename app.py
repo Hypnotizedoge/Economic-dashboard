@@ -7,7 +7,7 @@ from theme import inject_css
 
 st.set_page_config(
     page_title="Malaysia Economic Dashboard",
-    page_icon="🇲🇾",
+    page_icon=None,
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -16,40 +16,36 @@ inject_css()
 col_title, col_nav = st.columns([2, 1])
 
 with col_title:
-    st.markdown("# 🇲🇾 Malaysia Economy")
+    st.markdown("# Malaysia Economy")
     st.markdown("<p style='color:#8B95A5;font-size:0.85rem;margin-top:-10px;'>DOSM Open Data Dashboard</p>", unsafe_allow_html=True)
 
 with col_nav:
     page = st.selectbox(
         "Navigate",
         options=[
-            "📊 Economic Growth",
-            "👷 Employment",
-            "💰 Prices",
-            "🚢 Trade",
-            "🏭 Industrial & Retail",
-            "🏦 Financial",
+            "Economic Growth",
+            "Employment",
+            "Prices",
+            "Trade",
+            "Financial",
         ],
         label_visibility="collapsed",
     )
 
 st.divider()
 
-if page == "📊 Economic Growth":
+if page == "Economic Growth":
     from modules import page_economic
     page_economic.render()
-elif page == "👷 Employment":
+elif page == "Employment":
     from modules import page_employment
     page_employment.render()
-elif page == "💰 Prices":
+elif page == "Prices":
     from modules import page_prices
     page_prices.render()
-elif page == "🚢 Trade":
+elif page == "Trade":
     from modules import page_trade
     page_trade.render()
-elif page == "🏭 Industrial & Retail":
-    from modules import page_industrial
-    page_industrial.render()
-elif page == "🏦 Financial":
+elif page == "Financial":
     from modules import page_financial
     page_financial.render()
