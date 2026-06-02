@@ -246,6 +246,7 @@ def render():
                         marker_color=DIV_COLORS[code]["bar"],
                         hovertemplate=f"<b>{lbl} Sales</b><br>%{{x|%b %Y}}<br>RM %{{y:,.0f}}M<extra></extra>"
                     ),
+                    row=1, col=1,
                     secondary_y=False
                 )
 
@@ -260,6 +261,7 @@ def render():
                             line=dict(color=DIV_COLORS[code]["yoy"], width=2),
                             hovertemplate=f"<b>{lbl} YoY</b><br>%{{x|%b %Y}}<br>%{{y:.1f}}%<extra></extra>"
                         ),
+                        row=1, col=1,
                         secondary_y=True
                     )
 
@@ -274,6 +276,7 @@ def render():
                             line=dict(color=DIV_COLORS[code]["mom"], width=2, dash="dash"),
                             hovertemplate=f"<b>{lbl} MoM</b><br>%{{x|%b %Y}}<br>%{{y:.1f}}%<extra></extra>"
                         ),
+                        row=1, col=1,
                         secondary_y=True
                     )
 
