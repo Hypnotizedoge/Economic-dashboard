@@ -7,7 +7,7 @@ from theme import style, COLORS
 
 
 def render():
-    st.markdown("# 🚢 Trade")
+    st.markdown("## 🚢 Trade")
     st.caption("Monthly trade in goods")
 
     tr = load("trade_headline")

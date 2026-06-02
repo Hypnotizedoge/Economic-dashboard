@@ -7,7 +7,7 @@ from theme import style, COLORS
 
 
 def render():
-    st.markdown("# 👷 Employment")
+    st.markdown("## 👷 Employment")
     st.caption("Monthly labour force statistics")
 
     lfs = load("lfs_sa").sort_values("date")

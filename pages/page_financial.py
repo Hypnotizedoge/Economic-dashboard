@@ -6,7 +6,7 @@ from theme import style, COLORS
 
 
 def render():
-    st.markdown("# 🏦 Financial")
+    st.markdown("## 🏦 Financial")
     st.caption("Balance of Payments & Foreign Direct Investment")
 
     fdi = load("fdi").sort_values("date")

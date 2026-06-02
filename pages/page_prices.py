@@ -6,7 +6,7 @@ from theme import style, COLORS
 
 
 def render():
-    st.markdown("# 💰 Prices")
+    st.markdown("## 💰 Prices")
     st.caption("Consumer Price Index, Producer Price Index, Services PPI")
 
     cpi = load("cpi")

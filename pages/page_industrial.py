@@ -6,7 +6,7 @@ from theme import style, COLORS
 
 
 def render():
-    st.markdown("# 🏭 Industrial & Retail")
+    st.markdown("## 🏭 Industrial & Retail")
     st.caption("Industrial Production Index & Wholesale/Retail Trade")
 
     ipi = load("ipi")

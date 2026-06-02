@@ -7,7 +7,7 @@ from theme import style, COLORS
 
 
 def render():
-    st.markdown("# 📊 Economic Growth")
+    st.markdown("## 📊 Economic Growth")
     st.caption("Quarterly Nominal GDP & Productivity")
 
     gdp_s = load("gdp_supply")
