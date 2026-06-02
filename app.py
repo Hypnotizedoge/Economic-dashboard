@@ -36,20 +36,20 @@ with col_nav:
 st.divider()
 
 if page == "📊 Economic Growth":
-    from pages import page_economic
+    from modules import page_economic
     page_economic.render()
 elif page == "👷 Employment":
-    from pages import page_employment
+    from modules import page_employment
     page_employment.render()
 elif page == "💰 Prices":
-    from pages import page_prices
+    from modules import page_prices
     page_prices.render()
 elif page == "🚢 Trade":
-    from pages import page_trade
+    from modules import page_trade
     page_trade.render()
 elif page == "🏭 Industrial & Retail":
-    from pages import page_industrial
+    from modules import page_industrial
     page_industrial.render()
 elif page == "🏦 Financial":
-    from pages import page_financial
+    from modules import page_financial
     page_financial.render()
