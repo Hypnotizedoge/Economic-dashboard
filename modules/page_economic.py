@@ -50,9 +50,18 @@ def render():
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("GDP by Sector (Supply)")
+        sectors_opt = list(GDP_SUPPLY_SECTORS.items())[1:] # Exclude overall
+        sel_sectors = st.multiselect(
+            "Filter Sectors",
+            options=[k for k, v in sectors_opt],
+            default=[k for k, v in sectors_opt],
+            format_func=lambda x: GDP_SUPPLY_SECTORS[x],
+            key="gdp_supply_sectors_sel"
+        )
         sabs = fseries(gdp_s, "abs").query("sector != 'p0'")
         fig_s = go.Figure()
-        for code, lbl in list(GDP_SUPPLY_SECTORS.items())[1:]:
+        for code in sel_sectors:
+            lbl = GDP_SUPPLY_SECTORS[code]
             sd = sabs.query(f"sector=='{code}'").sort_values("date").copy()
             if sd.empty: continue
             sd["quarter"] = sd["date"].dt.year.astype(str) + " Q" + sd["date"].dt.quarter.astype(str)
@@ -113,13 +122,17 @@ def render():
         
     if "sector" in prod_s.columns:
         sectors = prod_s["sector"].unique()
+        valid_sectors = [s for s in sectors if s in GDP_SUPPLY_SECTORS]
+        sel_prod_sectors = st.multiselect(
+            "Filter Sectors",
+            options=valid_sectors,
+            default=["p0", "p3", "p5"], # Default to Overall, Manufacturing, Services
+            format_func=lambda x: GDP_SUPPLY_SECTORS[x],
+            key="prod_sectors_sel"
+        )
         fig_p = go.Figure()
-        for s in sectors:
-            if s in GDP_SUPPLY_SECTORS:
-                lbl = GDP_SUPPLY_SECTORS[s]
-            else:
-                continue
-            
+        for s in sel_prod_sectors:
+            lbl = GDP_SUPPLY_SECTORS[s]
             ps = prod_s[prod_s["sector"] == s].copy()
             if ps.empty or metric_col not in ps.columns: continue
             

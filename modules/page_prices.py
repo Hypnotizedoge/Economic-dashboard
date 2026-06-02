@@ -74,9 +74,17 @@ def render():
 
         with col2:
             st.subheader("PPI by Industry")
+            sel_ppi_sec = st.multiselect(
+                "Filter Industries",
+                options=list(PPI_SECTIONS.keys()),
+                default=list(PPI_SECTIONS.keys()),
+                format_func=lambda x: PPI_SECTIONS[x],
+                key="ppi_sec_sel"
+            )
             pabs = fseries(ppi_1d, "abs")
             fig_pi = go.Figure()
-            for code, lbl in PPI_SECTIONS.items():
+            for code in sel_ppi_sec:
+                lbl = PPI_SECTIONS[code]
                 sd = pabs.query(f"section=='{code}'").sort_values("date")
                 if sd.empty: continue
                 fig_pi.add_trace(go.Scatter(x=sd["date"], y=sd["index"], mode="lines", name=lbl,

@@ -48,7 +48,8 @@ def render():
     with col1:
         st.subheader("Youth Unemployment Rate")
         fig_y = go.Figure()
-        fig_y.add_trace(go.Scatter(x=youth["date"], y=youth["u_rate_15_24"], mode="lines",
+        # DOSM's dataset has swapped columns: unemployed_15_30 holds u_rate_15_24, and u_rate_15_30 holds u_rate_15_30.
+        fig_y.add_trace(go.Scatter(x=youth["date"], y=youth["unemployed_15_30"], mode="lines",
             name="Age 15–24", line=dict(color=COLORS["accent2"], width=2.5),
             hovertemplate="<b>%{x|%b %Y}</b><br>15-24: %{y:.1f}%<extra></extra>"))
         fig_y.add_trace(go.Scatter(x=youth["date"], y=youth["u_rate_15_30"], mode="lines",

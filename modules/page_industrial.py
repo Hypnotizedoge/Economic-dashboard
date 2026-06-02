@@ -47,9 +47,17 @@ def render():
 
         with col2:
             st.subheader("IPI by Section")
+            sel_ipi_sec = st.multiselect(
+                "Filter Sections",
+                options=list(IPI_SECTIONS.keys()),
+                default=list(IPI_SECTIONS.keys()),
+                format_func=lambda x: IPI_SECTIONS[x],
+                key="ipi_sec_sel"
+            )
             iabs = fseries(ipi_1d, "abs")
             fig_s = go.Figure()
-            for code, lbl in IPI_SECTIONS.items():
+            for code in sel_ipi_sec:
+                lbl = IPI_SECTIONS[code]
                 sd = iabs.query(f"section=='{code}'").sort_values("date")
                 if sd.empty: continue
                 fig_s.add_trace(go.Scatter(x=sd["date"], y=sd["index"], mode="lines", name=lbl,
