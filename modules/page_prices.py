@@ -1,4 +1,4 @@
-"""Prices & Production — CPI, PPI, SPPI, IPI, IOWRT"""
+"""Prices & Production — CPI, PPI, IPI, IOWRT"""
 import streamlit as st
 import plotly.graph_objects as go
 from data_loader import load, fseries, latest, CPI_DIVISIONS, PPI_SECTIONS, IPI_SECTIONS, IOWRT_DIVISIONS, fmt
@@ -7,14 +7,13 @@ from theme import style, COLORS
 
 def render():
     st.markdown("## Prices")
-    st.caption("Consumer Price Index, Producer Price Index, Services PPI, Industrial Production, and Wholesale & Retail Trade")
+    st.caption("Consumer Price Index, Producer Price Index, Industrial Production, and Wholesale & Retail Trade")
 
     cpi = load("cpi")
     cpi_inf = load("cpi_inflation")
     ppi_raw = load("ppi")
     ppi_1d = load("ppi_1d")
     cpi_st = load("cpi_state")
-    sppi = load("sppi")
     ipi = load("ipi")
     ipi_1d = load("ipi_1d")
     iowrt = load("iowrt")
@@ -45,8 +44,8 @@ def render():
     c4.metric(f"PPI ({pd_.strftime('%b %Y') if pd_ else ''})", f"{pv:.1f}" if pv else "N/A")
     st.divider()
 
-    tab_cpi, tab_ppi, tab_state, tab_ipi, tab_iowrt = st.tabs([
-        "CPI", "PPI", "CPI by State", "Industrial Production", "Wholesale & Retail"
+    tab_cpi, tab_ppi, tab_ipi, tab_iowrt = st.tabs([
+        "CPI", "PPI", "Industrial Production", "Wholesale & Retail"
     ])
 
     with tab_cpi:
@@ -72,6 +71,19 @@ def render():
         fig_i = style(fig_i, 400)
         fig_i.update_layout(yaxis_title="YoY Inflation (%)")
         st.plotly_chart(fig_i, use_container_width=True)
+
+        st.subheader("CPI by State")
+        cs = cpi_st.query("division=='overall'").sort_values("date")
+        states = sorted(cs["state"].unique())
+        sel_st = st.multiselect("Select states", states, default=states[:5], key="st_sel")
+        fig_st = go.Figure()
+        for s in sel_st:
+            sd = cs.query(f"state=='{s}'")
+            fig_st.add_trace(go.Scatter(x=sd["date"], y=sd["index"], mode="lines", name=s,
+                hovertemplate=f"<b>{s}</b><br>%{{x|%b %Y}}<br>CPI: %{{y:.1f}}<extra></extra>"))
+        fig_st = style(fig_st, 420)
+        fig_st.update_layout(yaxis_title="CPI (2010=100)")
+        st.plotly_chart(fig_st, use_container_width=True)
 
     with tab_ppi:
         col1, col2 = st.columns(2)
@@ -105,33 +117,6 @@ def render():
                 fig_pi.add_trace(go.Scatter(x=sd["date"], y=sd["index"], mode="lines", name=lbl,
                     hovertemplate=f"<b>{lbl}</b><br>%{{x|%b %Y}}<br>%{{y:.1f}}<extra></extra>"))
             st.plotly_chart(style(fig_pi, 380), use_container_width=True)
-
-        # SPPI
-        st.subheader("Services PPI (Quarterly)")
-        sppi_abs = fseries(sppi, "abs").sort_values("date") if "series" in sppi.columns else sppi.sort_values("date")
-        sppi_abs = sppi_abs.copy()
-        sppi_abs["quarter"] = sppi_abs["date"].dt.year.astype(str) + " Q" + sppi_abs["date"].dt.quarter.astype(str)
-        idx_col = "index" if "index" in sppi_abs.columns else sppi_abs.columns[-1]
-        fig_sp = go.Figure()
-        fig_sp.add_trace(go.Scatter(x=sppi_abs["date"], y=sppi_abs[idx_col], mode="lines+markers",
-            line=dict(color=COLORS["accent4"], width=2.5), marker=dict(size=5),
-            customdata=sppi_abs["quarter"],
-            hovertemplate="<b>%{customdata}</b><br>SPPI: %{y:.1f}<extra></extra>"))
-        st.plotly_chart(style(fig_sp, 350), use_container_width=True)
-
-    with tab_state:
-        st.subheader("CPI by State")
-        cs = cpi_st.query("division=='overall'").sort_values("date")
-        states = sorted(cs["state"].unique())
-        sel_st = st.multiselect("Select states", states, default=states[:5], key="st_sel")
-        fig_st = go.Figure()
-        for s in sel_st:
-            sd = cs.query(f"state=='{s}'")
-            fig_st.add_trace(go.Scatter(x=sd["date"], y=sd["index"], mode="lines", name=s,
-                hovertemplate=f"<b>{s}</b><br>%{{x|%b %Y}}<br>CPI: %{{y:.1f}}<extra></extra>"))
-        fig_st = style(fig_st, 420)
-        fig_st.update_layout(yaxis_title="CPI (2010=100)")
-        st.plotly_chart(fig_st, use_container_width=True)
 
     with tab_ipi:
         c_ipi_1, c_ipi_2 = st.columns(2)
@@ -211,5 +196,21 @@ def render():
                 fig_div.add_trace(go.Bar(x=sd["date"], y=sd["sales"], name=lbl,
                     hovertemplate=f"<b>{lbl}</b><br>%{{x|%b %Y}}<br>RM %{{y:,.0f}}M<extra></extra>"))
             fig_div = style(fig_div, 380)
-            fig_div.update_layout(barmode="group", yaxis_title="Sales (RM mn)")
+            fig_div.update_layout(barmode="stack", yaxis_title="Sales (RM mn)")
             st.plotly_chart(fig_div, use_container_width=True)
+
+        # IOWRT Volume YoY Growth
+        st.subheader("IOWRT Volume Growth (YoY %)")
+        iowrt_yoy = fseries(iowrt, "growth_yoy").sort_values("date")
+        fig_g = go.Figure()
+        fig_g.add_trace(go.Scatter(x=iowrt_yoy["date"], y=iowrt_yoy["volume"], mode="lines",
+            name="Volume", line=dict(color=COLORS["secondary"], width=2.5),
+            hovertemplate="<b>%{x|%b %Y}</b><br>Nominal YoY: %{y:.1f}%<extra></extra>"))
+        if "volume_sa" in iowrt_yoy.columns:
+            fig_g.add_trace(go.Scatter(x=iowrt_yoy["date"], y=iowrt_yoy["volume_sa"], mode="lines",
+                name="Volume (SA)", line=dict(color=COLORS["accent5"], width=2, dash="dot"),
+                hovertemplate="<b>%{x|%b %Y}</b><br>SA YoY: %{y:.1f}%<extra></extra>"))
+        fig_g.add_hline(y=0, line_dash="dot", line_color=COLORS["muted"], opacity=0.4)
+        fig_g = style(fig_g, 320)
+        fig_g.update_layout(yaxis_title="YoY Growth (%)")
+        st.plotly_chart(fig_g, use_container_width=True)

@@ -30,7 +30,7 @@ def render():
     st.divider()
 
     # Exports vs Imports
-    st.subheader("Exports vs Imports")
+    st.subheader("Trade Balance")
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     fig.add_trace(go.Scatter(x=tabs["date"], y=tabs["exports"], mode="lines", name="Exports",
         fill="tozeroy", line=dict(color=COLORS["primary"], width=2), fillcolor="rgba(0,212,170,0.08)",
@@ -51,6 +51,16 @@ def render():
     sitc_no = sitc_s[sitc_s["section"] != "overall"]
 
     st.subheader("Trade Composition by SITC (Time Series)")
+    
+    sitc_cats = {k: v for k, v in SITC_SECTIONS.items() if k != "overall"}
+    sel_sitc_cats = st.multiselect(
+        "Filter SITC Sections",
+        options=list(sitc_cats.keys()),
+        default=list(sitc_cats.keys()),
+        format_func=lambda x: sitc_cats[x],
+        key="sitc_categories_sel"
+    )
+
     fig_comp = make_subplots(
         rows=1, cols=2,
         subplot_titles=("Export Composition", "Import Composition"),
@@ -60,8 +70,8 @@ def render():
 
     first_legend = True
     idx = 0
-    for code, lbl in SITC_SECTIONS.items():
-        if code == "overall": continue
+    for code in sel_sitc_cats:
+        lbl = sitc_cats[code]
         sd = sitc_no[sitc_no["section"] == code]
         if sd.empty: continue
 
@@ -86,7 +96,7 @@ def render():
         idx += 1
 
     fig_comp.update_layout(barmode="stack")
-    fig_comp = style(fig_comp, 500)
+    fig_comp = style(fig_comp, 420)
     fig_comp.update_yaxes(title_text="RM million", row=1, col=1)
     st.plotly_chart(fig_comp, use_container_width=True)
 
