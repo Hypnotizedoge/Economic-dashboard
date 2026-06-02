@@ -3,11 +3,11 @@ import streamlit as st
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from data_loader import load, fseries, latest, fmt, SITC_SECTIONS
-from theme import style, COLORS
+from theme import style, COLORS, COLOR_SEQ
 
 
 def render():
-    st.markdown("## 🚢 Trade")
+    st.markdown("## Trade")
     st.caption("Monthly trade in goods")
 
     tr = load("trade_headline")
@@ -47,33 +47,48 @@ def render():
     st.plotly_chart(fig, use_container_width=True)
 
     # SITC composition
-    col1, col2 = st.columns(2)
     sitc_s = sitc.sort_values("date")
     sitc_no = sitc_s[sitc_s["section"] != "overall"]
 
-    with col1:
-        st.subheader("Export Composition by SITC (Time Series)")
-        fig_pe = go.Figure()
-        for code, lbl in SITC_SECTIONS.items():
-            if code == "overall": continue
-            sd = sitc_no[sitc_no["section"] == code]
-            if sd.empty: continue
-            fig_pe.add_trace(go.Bar(x=sd["date"], y=sd["exports"], name=lbl,
-                hovertemplate=f"<b>{lbl}</b><br>%{{x|%b %Y}}<br>RM %{{y:,.0f}}<extra></extra>"))
-        fig_pe.update_layout(barmode="stack", yaxis_title="RM")
-        st.plotly_chart(style(fig_pe, 400), use_container_width=True)
+    st.subheader("Trade Composition by SITC (Time Series)")
+    fig_comp = make_subplots(
+        rows=1, cols=2,
+        subplot_titles=("Export Composition", "Import Composition"),
+        shared_yaxes=True,
+        horizontal_spacing=0.05
+    )
 
-    with col2:
-        st.subheader("Import Composition by SITC (Time Series)")
-        fig_pi = go.Figure()
-        for code, lbl in SITC_SECTIONS.items():
-            if code == "overall": continue
-            sd = sitc_no[sitc_no["section"] == code]
-            if sd.empty: continue
-            fig_pi.add_trace(go.Bar(x=sd["date"], y=sd["imports"], name=lbl,
-                hovertemplate=f"<b>{lbl}</b><br>%{{x|%b %Y}}<br>RM %{{y:,.0f}}<extra></extra>"))
-        fig_pi.update_layout(barmode="stack", yaxis_title="RM")
-        st.plotly_chart(style(fig_pi, 400), use_container_width=True)
+    first_legend = True
+    idx = 0
+    for code, lbl in SITC_SECTIONS.items():
+        if code == "overall": continue
+        sd = sitc_no[sitc_no["section"] == code]
+        if sd.empty: continue
+
+        color = COLOR_SEQ[idx % len(COLOR_SEQ)]
+
+        # Add Exports (Col 1)
+        fig_comp.add_trace(
+            go.Bar(x=sd["date"], y=sd["exports"], name=lbl,
+                legendgroup=lbl, showlegend=first_legend, marker_color=color,
+                hovertemplate=f"<b>{lbl} (Export)</b><br>%{{x|%b %Y}}<br>RM %{{y:,.0f}}<extra></extra>"),
+            row=1, col=1
+        )
+
+        # Add Imports (Col 2)
+        fig_comp.add_trace(
+            go.Bar(x=sd["date"], y=sd["imports"], name=lbl,
+                legendgroup=lbl, showlegend=False, marker_color=color,
+                hovertemplate=f"<b>{lbl} (Import)</b><br>%{{x|%b %Y}}<br>RM %{{y:,.0f}}<extra></extra>"),
+            row=1, col=2
+        )
+        first_legend = False
+        idx += 1
+
+    fig_comp.update_layout(barmode="stack")
+    fig_comp = style(fig_comp, 500)
+    fig_comp.update_yaxes(title_text="RM million", row=1, col=1)
+    st.plotly_chart(fig_comp, use_container_width=True)
 
     # YoY Growth
     st.subheader("Trade Growth (YoY %)")
