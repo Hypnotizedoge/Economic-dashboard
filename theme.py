@@ -21,7 +21,6 @@ LAYOUT = dict(
     paper_bgcolor="rgba(0,0,0,0)",
     plot_bgcolor="rgba(0,0,0,0)",
     font=dict(family="Inter, sans-serif", color=COLORS["text"], size=13),
-    title_font=dict(size=18, color=COLORS["text"]),
     legend=dict(
         bgcolor="rgba(0,0,0,0)", font=dict(size=11, color=COLORS["muted"]),
         orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
