@@ -34,11 +34,13 @@ def render():
     # Long-term GDP
     st.subheader("Long-Term GDP Trend (1991 – Present)")
     dosm = ov[["date", "value"]].rename(columns={"value": "gdp_nominal"})
-    combined = pd.concat([gdp_hist, dosm]).sort_values("date").drop_duplicates("date", keep="last")
+    combined = pd.concat([gdp_hist, dosm]).sort_values("date").drop_duplicates("date", keep="last").copy()
+    combined["quarter"] = combined["date"].dt.year.astype(str) + " Q" + combined["date"].dt.quarter.astype(str)
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=combined["date"], y=combined["gdp_nominal"], mode="lines", fill="tozeroy",
         line=dict(color=COLORS["primary"], width=2), fillcolor="rgba(0,212,170,0.1)",
-        name="Nominal GDP (RM mn)", hovertemplate="<b>%{x|%b %Y}</b><br>RM %{y:,.0f}M<extra></extra>"))
+        name="Nominal GDP (RM mn)", customdata=combined["quarter"],
+        hovertemplate="<b>%{customdata}</b><br>RM %{y:,.0f}M<extra></extra>"))
     fig.add_vline(x="2015-01-01", line_dash="dot", line_color=COLORS["muted"], opacity=0.5)
     fig.add_annotation(x="2015-01-01", y=combined["gdp_nominal"].max()*0.9, text="← CEIC | DOSM →",
         showarrow=False, font=dict(size=10, color=COLORS["muted"]))
@@ -51,10 +53,12 @@ def render():
         sabs = fseries(gdp_s, "abs").query("sector != 'p0'")
         fig_s = go.Figure()
         for code, lbl in list(GDP_SUPPLY_SECTORS.items())[1:]:
-            sd = sabs.query(f"sector=='{code}'").sort_values("date")
+            sd = sabs.query(f"sector=='{code}'").sort_values("date").copy()
             if sd.empty: continue
+            sd["quarter"] = sd["date"].dt.year.astype(str) + " Q" + sd["date"].dt.quarter.astype(str)
             fig_s.add_trace(go.Scatter(x=sd["date"], y=sd["value"], mode="lines", stackgroup="one",
-                name=lbl, line=dict(width=0.5), hovertemplate=f"<b>{lbl}</b><br>%{{x|%b %Y}}<br>RM %{{y:,.0f}}M<extra></extra>"))
+                name=lbl, line=dict(width=0.5), customdata=sd["quarter"],
+                hovertemplate=f"<b>{lbl}</b><br>%{{customdata}}<br>RM %{{y:,.0f}}M<extra></extra>"))
         fig_s = style(fig_s)
         fig_s.update_layout(yaxis_title="RM million")
         st.plotly_chart(fig_s, use_container_width=True)
@@ -64,10 +68,11 @@ def render():
         dabs = fseries(gdp_d, "abs").query("type != 'e0'")
         fig_d = go.Figure()
         for code, lbl in list(GDP_DEMAND_TYPES.items())[1:]:
-            dd = dabs.query(f"type=='{code}'").sort_values("date")
+            dd = dabs.query(f"type=='{code}'").sort_values("date").copy()
             if dd.empty: continue
-            fig_d.add_trace(go.Bar(x=dd["date"], y=dd["value"], name=lbl,
-                hovertemplate=f"<b>{lbl}</b><br>%{{x|%b %Y}}<br>RM %{{y:,.0f}}M<extra></extra>"))
+            dd["quarter"] = dd["date"].dt.year.astype(str) + " Q" + dd["date"].dt.quarter.astype(str)
+            fig_d.add_trace(go.Bar(x=dd["date"], y=dd["value"], name=lbl, customdata=dd["quarter"],
+                hovertemplate=f"<b>{lbl}</b><br>%{{customdata}}<br>RM %{{y:,.0f}}M<extra></extra>"))
         fig_d = style(fig_d)
         fig_d.update_layout(barmode="relative", yaxis_title="RM million")
         st.plotly_chart(fig_d, use_container_width=True)
@@ -80,24 +85,55 @@ def render():
     fig_g = go.Figure()
     for code in sel:
         lbl = GDP_SUPPLY_SECTORS[code]
-        gd = yoy.query(f"sector=='{code}'").sort_values("date")
+        gd = yoy.query(f"sector=='{code}'").sort_values("date").copy()
         if gd.empty: continue
+        gd["quarter"] = gd["date"].dt.year.astype(str) + " Q" + gd["date"].dt.quarter.astype(str)
         fig_g.add_trace(go.Scatter(x=gd["date"], y=gd["value"], mode="lines+markers", name=lbl,
-            marker=dict(size=4), hovertemplate=f"<b>{lbl}</b><br>%{{x|%b %Y}}<br>%{{y:.1f}}%<extra></extra>"))
+            customdata=gd["quarter"], marker=dict(size=4),
+            hovertemplate=f"<b>{lbl}</b><br>%{{customdata}}<br>%{{y:.1f}}%<extra></extra>"))
     fig_g.add_hline(y=0, line_dash="dot", line_color=COLORS["muted"], opacity=0.4)
     st.plotly_chart(style(fig_g, 380), use_container_width=True)
 
     # Productivity
     st.subheader("Quarterly Productivity by Sector")
+    
+    # Filter for productivity metric
+    metric_opt = st.radio(
+        "Select Productivity Metric",
+        options=["Output per Hour (RM)", "Output per Worker (RM)"],
+        horizontal=True,
+        label_visibility="collapsed",
+        key="prod_metric"
+    )
+    metric_col = "output_hour" if "Hour" in metric_opt else "output_employment"
+    
     prod_s = prod.sort_values("date") if "date" in prod.columns else prod
-    if "sector" in prod.columns:
-        sectors = prod["sector"].unique()
+    if "series" in prod_s.columns:
+        prod_s = prod_s[prod_s["series"] == "abs"]
+        
+    if "sector" in prod_s.columns:
+        sectors = prod_s["sector"].unique()
         fig_p = go.Figure()
         for s in sectors:
-            ps = prod_s[prod_s["sector"] == s]
-            col_val = [c for c in ps.columns if c not in ("date", "sector", "series")][0] if len(ps.columns) > 2 else None
-            if col_val:
-                fig_p.add_trace(go.Scatter(x=ps["date"], y=ps[col_val], mode="lines", name=str(s)))
-        st.plotly_chart(style(fig_p, 380), use_container_width=True)
+            if s in GDP_SUPPLY_SECTORS:
+                lbl = GDP_SUPPLY_SECTORS[s]
+            else:
+                continue
+            
+            ps = prod_s[prod_s["sector"] == s].copy()
+            if ps.empty or metric_col not in ps.columns: continue
+            
+            # Format quarter string
+            ps["quarter"] = ps["date"].dt.year.astype(str) + " Q" + ps["date"].dt.quarter.astype(str)
+            
+            fig_p.add_trace(go.Scatter(
+                x=ps["date"], y=ps[metric_col], mode="lines+markers", name=lbl,
+                customdata=ps["quarter"],
+                marker=dict(size=4),
+                hovertemplate=f"<b>{lbl}</b><br>%{{customdata}}<br>RM %{{y:,.1f}}<extra></extra>"
+            ))
+        fig_p = style(fig_p, 380)
+        fig_p.update_layout(yaxis_title="RM")
+        st.plotly_chart(fig_p, use_container_width=True)
     else:
         st.dataframe(prod.head(20))

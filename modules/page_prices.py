@@ -86,11 +86,14 @@ def render():
         # SPPI
         st.subheader("Services PPI (Quarterly)")
         sppi_abs = fseries(sppi, "abs").sort_values("date") if "series" in sppi.columns else sppi.sort_values("date")
+        sppi_abs = sppi_abs.copy()
+        sppi_abs["quarter"] = sppi_abs["date"].dt.year.astype(str) + " Q" + sppi_abs["date"].dt.quarter.astype(str)
         idx_col = "index" if "index" in sppi_abs.columns else sppi_abs.columns[-1]
         fig_sp = go.Figure()
         fig_sp.add_trace(go.Scatter(x=sppi_abs["date"], y=sppi_abs[idx_col], mode="lines+markers",
             line=dict(color=COLORS["accent4"], width=2.5), marker=dict(size=5),
-            hovertemplate="<b>%{x|%b %Y}</b><br>SPPI: %{y:.1f}<extra></extra>"))
+            customdata=sppi_abs["quarter"],
+            hovertemplate="<b>%{customdata}</b><br>SPPI: %{y:.1f}<extra></extra>"))
         st.plotly_chart(style(fig_sp, 350), use_container_width=True)
 
     with tab_state:

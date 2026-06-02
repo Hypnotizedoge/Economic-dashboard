@@ -50,22 +50,29 @@ def render():
     col1, col2 = st.columns(2)
     sitc_s = sitc.sort_values("date")
     sitc_no = sitc_s[sitc_s["section"] != "overall"]
-    ld = sitc_no["date"].max()
-    sl = sitc_no[sitc_no["date"] == ld]
 
     with col1:
-        st.subheader(f"Export Composition ({ld.strftime('%b %Y')})")
-        labels = [SITC_SECTIONS.get(str(s), str(s)) for s in sl["section"]]
-        fig_pe = go.Figure(go.Pie(labels=labels, values=sl["exports"], hole=0.45,
-            textinfo="label+percent", textfont=dict(size=10),
-            hovertemplate="<b>%{label}</b><br>RM %{value:,.0f}<br>%{percent}<extra></extra>"))
+        st.subheader("Export Composition by SITC (Time Series)")
+        fig_pe = go.Figure()
+        for code, lbl in SITC_SECTIONS.items():
+            if code == "overall": continue
+            sd = sitc_no[sitc_no["section"] == code]
+            if sd.empty: continue
+            fig_pe.add_trace(go.Bar(x=sd["date"], y=sd["exports"], name=lbl,
+                hovertemplate=f"<b>{lbl}</b><br>%{{x|%b %Y}}<br>RM %{{y:,.0f}}<extra></extra>"))
+        fig_pe.update_layout(barmode="stack", yaxis_title="RM")
         st.plotly_chart(style(fig_pe, 400), use_container_width=True)
 
     with col2:
-        st.subheader(f"Import Composition ({ld.strftime('%b %Y')})")
-        fig_pi = go.Figure(go.Pie(labels=labels, values=sl["imports"], hole=0.45,
-            textinfo="label+percent", textfont=dict(size=10),
-            hovertemplate="<b>%{label}</b><br>RM %{value:,.0f}<br>%{percent}<extra></extra>"))
+        st.subheader("Import Composition by SITC (Time Series)")
+        fig_pi = go.Figure()
+        for code, lbl in SITC_SECTIONS.items():
+            if code == "overall": continue
+            sd = sitc_no[sitc_no["section"] == code]
+            if sd.empty: continue
+            fig_pi.add_trace(go.Bar(x=sd["date"], y=sd["imports"], name=lbl,
+                hovertemplate=f"<b>{lbl}</b><br>%{{x|%b %Y}}<br>RM %{{y:,.0f}}<extra></extra>"))
+        fig_pi.update_layout(barmode="stack", yaxis_title="RM")
         st.plotly_chart(style(fig_pi, 400), use_container_width=True)
 
     # YoY Growth
