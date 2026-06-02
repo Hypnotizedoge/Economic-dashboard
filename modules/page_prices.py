@@ -1,6 +1,7 @@
 """Prices & Production — CPI, PPI, IPI, IOWRT"""
 import streamlit as st
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 from data_loader import load, fseries, latest, CPI_DIVISIONS, PPI_SECTIONS, IPI_SECTIONS, IOWRT_DIVISIONS, fmt
 from theme import style, COLORS
 
@@ -187,30 +188,100 @@ def render():
             st.plotly_chart(style(fig_w, 380), use_container_width=True)
 
         with col2:
-            st.subheader("Sales by Division")
-            wabs = fseries(iowrt_2d, "abs")
-            fig_div = go.Figure()
-            for code, lbl in IOWRT_DIVISIONS.items():
-                sd = wabs.query(f"division=='{code}'").sort_values("date")
-                if sd.empty: continue
-                fig_div.add_trace(go.Bar(x=sd["date"], y=sd["sales"], name=lbl,
-                    hovertemplate=f"<b>{lbl}</b><br>%{{x|%b %Y}}<br>RM %{{y:,.0f}}M<extra></extra>"))
-            fig_div = style(fig_div, 380)
-            fig_div.update_layout(barmode="stack", yaxis_title="Sales (RM mn)")
-            st.plotly_chart(fig_div, use_container_width=True)
+            st.subheader("IOWRT Volume Growth (YoY %)")
+            iowrt_yoy = fseries(iowrt, "growth_yoy").sort_values("date")
+            fig_g = go.Figure()
+            fig_g.add_trace(go.Scatter(x=iowrt_yoy["date"], y=iowrt_yoy["volume"], mode="lines",
+                name="Volume", line=dict(color=COLORS["secondary"], width=2.5),
+                hovertemplate="<b>%{x|%b %Y}</b><br>Nominal YoY: %{y:.1f}%<extra></extra>"))
+            if "volume_sa" in iowrt_yoy.columns:
+                fig_g.add_trace(go.Scatter(x=iowrt_yoy["date"], y=iowrt_yoy["volume_sa"], mode="lines",
+                    name="Volume (SA)", line=dict(color=COLORS["accent5"], width=2, dash="dot"),
+                    hovertemplate="<b>%{x|%b %Y}</b><br>SA YoY: %{y:.1f}%<extra></extra>"))
+            fig_g.add_hline(y=0, line_dash="dot", line_color=COLORS["muted"], opacity=0.4)
+            st.plotly_chart(style(fig_g, 380), use_container_width=True)
 
-        # IOWRT Volume YoY Growth
-        st.subheader("IOWRT Volume Growth (YoY %)")
-        iowrt_yoy = fseries(iowrt, "growth_yoy").sort_values("date")
-        fig_g = go.Figure()
-        fig_g.add_trace(go.Scatter(x=iowrt_yoy["date"], y=iowrt_yoy["volume"], mode="lines",
-            name="Volume", line=dict(color=COLORS["secondary"], width=2.5),
-            hovertemplate="<b>%{x|%b %Y}</b><br>Nominal YoY: %{y:.1f}%<extra></extra>"))
-        if "volume_sa" in iowrt_yoy.columns:
-            fig_g.add_trace(go.Scatter(x=iowrt_yoy["date"], y=iowrt_yoy["volume_sa"], mode="lines",
-                name="Volume (SA)", line=dict(color=COLORS["accent5"], width=2, dash="dot"),
-                hovertemplate="<b>%{x|%b %Y}</b><br>SA YoY: %{y:.1f}%<extra></extra>"))
-        fig_g.add_hline(y=0, line_dash="dot", line_color=COLORS["muted"], opacity=0.4)
-        fig_g = style(fig_g, 320)
-        fig_g.update_layout(yaxis_title="YoY Growth (%)")
-        st.plotly_chart(fig_g, use_container_width=True)
+        st.divider()
+
+        st.subheader("Sales by Division")
+
+        col_f1, col_f2 = st.columns(2)
+        with col_f1:
+            sel_divs = st.multiselect(
+                "Filter Divisions",
+                options=list(IOWRT_DIVISIONS.keys()),
+                default=list(IOWRT_DIVISIONS.keys()),
+                format_func=lambda x: IOWRT_DIVISIONS[x],
+                key="iowrt_div_sel"
+            )
+        with col_f2:
+            sel_growth = st.multiselect(
+                "Toggle Growth Lines (Secondary Axis)",
+                options=["YoY Growth", "MoM Growth"],
+                default=["YoY Growth"],
+                key="iowrt_growth_sel"
+            )
+
+        wabs = fseries(iowrt_2d, "abs")
+        wyoy = fseries(iowrt_2d, "growth_yoy")
+        wmom = fseries(iowrt_2d, "growth_mom")
+
+        fig_div = make_subplots(specs=[[{"secondary_y": True}]])
+
+        DIV_COLORS = {
+            "45": {"bar": COLORS["primary"], "yoy": COLORS["accent3"], "mom": COLORS["accent6"]},
+            "46": {"bar": COLORS["secondary"], "yoy": COLORS["accent2"], "mom": COLORS["accent4"]},
+            "47": {"bar": COLORS["accent1"], "yoy": COLORS["accent5"], "mom": "#F59E0B"}
+        }
+
+        for code in sel_divs:
+            lbl = IOWRT_DIVISIONS[code]
+
+            # 1. Bar chart for absolute Sales (Primary Y)
+            sd = wabs.query(f"division=='{code}'").sort_values("date")
+            if not sd.empty:
+                fig_div.add_trace(
+                    go.Bar(
+                        x=sd["date"], y=sd["sales"], name=f"{lbl} Sales",
+                        marker_color=DIV_COLORS[code]["bar"],
+                        hovertemplate=f"<b>{lbl} Sales</b><br>%{{x|%b %Y}}<br>RM %{{y:,.0f}}M<extra></extra>"
+                    ),
+                    secondary_y=False
+                )
+
+            # 2. Line chart for YoY Change (Secondary Y)
+            if "YoY Growth" in sel_growth:
+                sd_yoy = wyoy.query(f"division=='{code}'").sort_values("date")
+                if not sd_yoy.empty:
+                    fig_div.add_trace(
+                        go.Scatter(
+                            x=sd_yoy["date"], y=sd_yoy["sales"], mode="lines",
+                            name=f"{lbl} YoY",
+                            line=dict(color=DIV_COLORS[code]["yoy"], width=2),
+                            hovertemplate=f"<b>{lbl} YoY</b><br>%{{x|%b %Y}}<br>%{{y:.1f}}%<extra></extra>"
+                        ),
+                        secondary_y=True
+                    )
+
+            # 3. Line chart for MoM Change (Secondary Y)
+            if "MoM Growth" in sel_growth:
+                sd_mom = wmom.query(f"division=='{code}'").sort_values("date")
+                if not sd_mom.empty:
+                    fig_div.add_trace(
+                        go.Scatter(
+                            x=sd_mom["date"], y=sd_mom["sales"], mode="lines",
+                            name=f"{lbl} MoM",
+                            line=dict(color=DIV_COLORS[code]["mom"], width=2, dash="dash"),
+                            hovertemplate=f"<b>{lbl} MoM</b><br>%{{x|%b %Y}}<br>%{{y:.1f}}%<extra></extra>"
+                        ),
+                        secondary_y=True
+                    )
+
+        fig_div = style(fig_div, 450)
+        fig_div.update_layout(
+            barmode="stack",
+            yaxis_title="Sales (RM mn)",
+            yaxis2_title="Growth Rate (%)"
+        )
+        fig_div.update_yaxes(showgrid=False, secondary_y=True)
+        st.plotly_chart(fig_div, use_container_width=True)
