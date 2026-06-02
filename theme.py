@@ -64,8 +64,10 @@ def inject_css():
         -webkit-background-clip: text; -webkit-text-fill-color: transparent;
         font-weight: 700; letter-spacing: -0.5px; }
     section[data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #0E1117 0%, #1A1F2E 100%);
-        border-right: 1px solid rgba(0,212,170,0.1);
+        display: none;
+    }
+    [data-testid="collapsedControl"] {
+        display: none;
     }
     .stTabs [data-baseweb="tab-list"] { gap: 8px; }
     .stTabs [data-baseweb="tab"] { background-color: transparent; border-radius: 8px; padding: 8px 16px; color: #8B95A5; }

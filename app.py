@@ -13,11 +13,14 @@ st.set_page_config(
 )
 inject_css()
 
-with st.sidebar:
-    st.markdown("## 🇲🇾 Malaysia Economy")
+col_title, col_nav = st.columns([2, 1])
+
+with col_title:
+    st.markdown("# 🇲🇾 Malaysia Economy")
     st.markdown("<p style='color:#8B95A5;font-size:0.85rem;margin-top:-10px;'>DOSM Open Data Dashboard</p>", unsafe_allow_html=True)
-    st.divider()
-    page = st.radio(
+
+with col_nav:
+    page = st.selectbox(
         "Navigate",
         options=[
             "📊 Economic Growth",
@@ -29,8 +32,8 @@ with st.sidebar:
         ],
         label_visibility="collapsed",
     )
-    st.divider()
-    st.markdown("<p style='color:#8B95A5;font-size:0.75rem;'>Data: <a href='https://open.dosm.gov.my' style='color:#00D4AA;'>open.dosm.gov.my</a></p>", unsafe_allow_html=True)
+
+st.divider()
 
 if page == "📊 Economic Growth":
     from pages import page_economic
