@@ -98,10 +98,21 @@ def render():
             label_visibility="collapsed"
         )
         
+        fx_filtered = fx.copy()
+        if "Indexed" in fx_mode:
+            unique_years = sorted(list(fx["date"].dt.year.unique()))
+            base_year = st.selectbox(
+                "Select Indexing Start Year",
+                options=unique_years,
+                index=0,
+                key="fx_base_year_sel"
+            )
+            fx_filtered = fx[fx["date"].dt.year >= base_year].copy()
+        
         if sel_currencies:
             fig_x = go.Figure()
             for col in sel_currencies:
-                fx_sub = fx[["date", col]].dropna()
+                fx_sub = fx_filtered[["date", col]].dropna()
                 if fx_sub.empty: continue
                 
                 if "Indexed" in fx_mode:
