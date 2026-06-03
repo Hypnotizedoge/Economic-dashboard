@@ -1,7 +1,7 @@
 """Financial — BOP, FDI"""
 import streamlit as st
 import plotly.graph_objects as go
-from data_loader import load, latest, fmt, BOP_ACCOUNTS
+from data_loader import load, latest, fmt, BOP_ACCOUNTS, load_fx_rates
 from theme import style, COLORS
 
 
@@ -58,10 +58,75 @@ def render():
         lbl = BOP_ACCOUNTS[acct]
         ad = bop.query(f"account=='{acct}'").copy()
         if ad.empty: continue
-        fig_b.add_trace(go.Scatter(x=ad["date"], y=ad["balance"], mode="lines+markers",
-            name=lbl, marker=dict(size=4), customdata=ad["quarter"],
-            hovertemplate=f"<b>{lbl}</b><br>%{{customdata}}<br>RM %{{y:,.1f}}M<extra></extra>"))
+        fig_b.add_trace(go.Bar(
+            x=ad["date"],
+            y=ad["balance"],
+            name=lbl,
+            customdata=ad["quarter"],
+            hovertemplate=f"<b>{lbl}</b><br>%{{customdata}}<br>RM %{{y:,.1f}}M<extra></extra>"
+        ))
     fig_b.add_hline(y=0, line_dash="dot", line_color=COLORS["muted"], opacity=0.4)
     fig_b = style(fig_b, 420)
-    fig_b.update_layout(yaxis_title="RM million")
+    fig_b.update_layout(barmode="group", yaxis_title="RM million")
     st.plotly_chart(fig_b, use_container_width=True)
+
+    # ── Exchange Rates Section ──────────────────────────────────────────────────
+    st.divider()
+    st.subheader("Exchange Rates (MYR per Foreign Currency)")
+    st.caption("Historical exchange rates of major currencies against the Malaysian Ringgit (MYR). A lower rate indicates MYR strength; a higher rate indicates MYR weakness.")
+
+    try:
+        fx = load_fx_rates().sort_values("date").copy()
+        
+        # Get list of all available currencies
+        all_currencies = [col for col in fx.columns if col not in ["date", "rate_type"]]
+        
+        # Multiselect for currencies
+        sel_currencies = st.multiselect(
+            "Select Currencies",
+            options=all_currencies,
+            default=["USD", "EUR", "SGD", "GBP", "JPY"],
+            key="fx_currencies_sel"
+        )
+        
+        # Toggle between raw rate and indexed rate (base = 100)
+        fx_mode = st.radio(
+            "View Mode",
+            options=["Raw Rate", "Indexed (Base = 100 on start date)"],
+            horizontal=True,
+            key="fx_view_mode",
+            label_visibility="collapsed"
+        )
+        
+        if sel_currencies:
+            fig_x = go.Figure()
+            for col in sel_currencies:
+                fx_sub = fx[["date", col]].dropna()
+                if fx_sub.empty: continue
+                
+                if "Indexed" in fx_mode:
+                    first_val = fx_sub[col].iloc[0]
+                    y_vals = (fx_sub[col] / first_val) * 100
+                    hover_fmt = "<b>{name} (Indexed)</b><br>%{x|%d %b %Y}<br>Index: %{y:.2f} (Base=100)<extra></extra>"
+                else:
+                    y_vals = fx_sub[col]
+                    hover_fmt = "<b>{name}</b><br>%{x|%d %b %Y}<br>Rate: %{y:.4f}<extra></extra>"
+                    
+                fig_x.add_trace(go.Scatter(
+                    x=fx_sub["date"],
+                    y=y_vals,
+                    mode="lines",
+                    name=col,
+                    hovertemplate=hover_fmt.replace("{name}", col)
+                ))
+            
+            fig_x = style(fig_x, 420)
+            if "Indexed" in fx_mode:
+                fig_x.update_layout(yaxis_title="Index (Base = 100)")
+            else:
+                fig_x.update_layout(yaxis_title="MYR per unit of foreign currency")
+            st.plotly_chart(fig_x, use_container_width=True)
+        else:
+            st.info("Please select at least one currency to display.")
+    except Exception as e:
+        st.error(f"Error loading exchange rates: {e}")
