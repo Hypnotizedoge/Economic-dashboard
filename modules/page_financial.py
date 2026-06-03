@@ -67,7 +67,7 @@ def render():
         ))
     fig_b.add_hline(y=0, line_dash="dot", line_color=COLORS["muted"], opacity=0.4)
     fig_b = style(fig_b, 420)
-    fig_b.update_layout(barmode="group", yaxis_title="RM million")
+    fig_b.update_layout(barmode="relative", yaxis_title="RM million")
     st.plotly_chart(fig_b, use_container_width=True)
 
     # ── Exchange Rates Section ──────────────────────────────────────────────────
