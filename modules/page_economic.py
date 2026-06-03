@@ -48,32 +48,87 @@ def render():
 
     # Supply
     st.subheader("GDP by Sector")
-    sectors_opt = list(GDP_SUPPLY_SECTORS.items())[1:] # Exclude overall
+    
+    comp_metric_s = st.radio(
+        "GDP by Sector Metric",
+        options=["Nominal Value", "YoY Growth (%)"],
+        horizontal=True,
+        key="gdp_sector_metric_sel",
+        label_visibility="collapsed"
+    )
+    
+    sectors_opt = list(GDP_SUPPLY_SECTORS.items())
     sel_sectors = st.multiselect(
         "Filter Sectors",
         options=[k for k, v in sectors_opt],
-        default=[k for k, v in sectors_opt],
+        default=[k for k, v in sectors_opt if k != "p0"],
         format_func=lambda x: GDP_SUPPLY_SECTORS[x],
         key="gdp_supply_sectors_sel"
     )
-    sabs = fseries(gdp_s, "abs").query("sector != 'p0'")
+    
+    df_filtered_s = fseries(gdp_s, "abs" if comp_metric_s == "Nominal Value" else "growth_yoy")
     fig_s = go.Figure()
     for code in sel_sectors:
         lbl = GDP_SUPPLY_SECTORS[code]
-        sd = sabs.query(f"sector=='{code}'").sort_values("date").copy()
+        sd = df_filtered_s.query(f"sector=='{code}'").sort_values("date").copy()
         if sd.empty: continue
         sd["quarter"] = sd["date"].dt.year.astype(str) + " Q" + sd["date"].dt.quarter.astype(str)
-        fig_s.add_trace(go.Scatter(x=sd["date"], y=sd["value"], mode="lines", stackgroup="one",
-            name=lbl, line=dict(width=0.5), customdata=sd["quarter"],
-            hovertemplate=f"<b>{lbl}</b><br>%{{customdata}}<br>RM %{{y:,.0f}}M<extra></extra>"))
+        
+        if comp_metric_s == "Nominal Value":
+            fig_s.add_trace(go.Scatter(x=sd["date"], y=sd["value"], mode="lines", stackgroup="one",
+                name=lbl, line=dict(width=0.5), customdata=sd["quarter"],
+                hovertemplate=f"<b>{lbl}</b><br>%{{customdata}}<br>RM %{{y:,.0f}}M<extra></extra>"))
+        else:
+            fig_s.add_trace(go.Scatter(x=sd["date"], y=sd["value"], mode="lines+markers", name=lbl,
+                customdata=sd["quarter"], marker=dict(size=4),
+                hovertemplate=f"<b>{lbl}</b><br>%{{customdata}}<br>%{{y:.1f}}%<extra></extra>"))
+                
     fig_s = style(fig_s, 450)
-    fig_s.update_layout(yaxis_title="RM million")
+    if comp_metric_s == "Nominal Value":
+        fig_s.update_layout(yaxis_title="RM million")
+    else:
+        fig_s.update_layout(yaxis_title="YoY Growth (%)")
+        fig_s.add_hline(y=0, line_dash="dot", line_color=COLORS["muted"], opacity=0.4)
     st.plotly_chart(fig_s, use_container_width=True)
 
     st.divider()
 
     # Demand
     st.subheader("GDP by Expenditure")
+    
+    # Create local mapping and calculate Net Exports (e5 - e6)
+    local_gdp_demand_types = GDP_DEMAND_TYPES.copy()
+    local_gdp_demand_types["net_exports"] = "Net Exports"
+    
+    df_abs = gdp_d[gdp_d["series"] == "abs"].copy()
+    e5_abs = df_abs[df_abs["type"] == "e5"].set_index("date")["value"]
+    e6_abs = df_abs[df_abs["type"] == "e6"].set_index("date")["value"]
+    
+    net_abs = (e5_abs - e6_abs).dropna().reset_index()
+    net_abs["series"] = "abs"
+    net_abs["type"] = "net_exports"
+    
+    # Calculate YoY Growth for Net Exports (from abs) handling negative base values correctly
+    net_abs = net_abs.sort_values("date")
+    net_yoy = net_abs.copy()
+    net_yoy_values = []
+    for i in range(len(net_abs)):
+        if i < 4:
+            net_yoy_values.append(None)
+        else:
+            prev = net_abs["value"].iloc[i-4]
+            curr = net_abs["value"].iloc[i]
+            if prev == 0 or pd.isna(prev) or pd.isna(curr):
+                net_yoy_values.append(None)
+            else:
+                net_yoy_values.append((curr - prev) / abs(prev) * 100)
+    net_yoy["value"] = net_yoy_values
+    net_yoy["series"] = "growth_yoy"
+    net_yoy["type"] = "net_exports"
+    
+    # Merge Net Exports back to the dataset
+    net_all = pd.concat([net_abs, net_yoy], ignore_index=True)
+    gdp_d_extended = pd.concat([gdp_d, net_all], ignore_index=True)
     
     comp_metric_d = st.radio(
         "GDP by Expenditure Metric",
@@ -83,19 +138,19 @@ def render():
         label_visibility="collapsed"
     )
     
-    demand_opt = list(GDP_DEMAND_TYPES.items())
+    demand_opt = list(local_gdp_demand_types.items())
     sel_demand = st.multiselect(
         "Filter Components",
         options=[k for k, v in demand_opt],
-        default=[k for k, v in demand_opt if k != "e0"],
-        format_func=lambda x: GDP_DEMAND_TYPES[x],
+        default=["e1", "e2", "e3", "e4", "net_exports"], # Default to the 5 components summing to overall GDP
+        format_func=lambda x: local_gdp_demand_types[x],
         key="gdp_demand_components_sel"
     )
     
-    df_filtered = fseries(gdp_d, "abs" if comp_metric_d == "Nominal Value" else "growth_yoy")
+    df_filtered = fseries(gdp_d_extended, "abs" if comp_metric_d == "Nominal Value" else "growth_yoy")
     fig_d = go.Figure()
     for code in sel_demand:
-        lbl = GDP_DEMAND_TYPES[code]
+        lbl = local_gdp_demand_types[code]
         dd = df_filtered.query(f"type=='{code}'").sort_values("date").copy()
         if dd.empty: continue
         dd["quarter"] = dd["date"].dt.year.astype(str) + " Q" + dd["date"].dt.quarter.astype(str)
