@@ -46,45 +46,75 @@ def render():
         showarrow=False, font=dict(size=10, color=COLORS["muted"]))
     st.plotly_chart(style(fig, 380), use_container_width=True)
 
-    # Supply & Demand side-by-side
-    col1, col2 = st.columns(2)
-    with col1:
-        st.subheader("GDP by Sector (Supply)")
-        sectors_opt = list(GDP_SUPPLY_SECTORS.items())[1:] # Exclude overall
-        sel_sectors = st.multiselect(
-            "Filter Sectors",
-            options=[k for k, v in sectors_opt],
-            default=[k for k, v in sectors_opt],
-            format_func=lambda x: GDP_SUPPLY_SECTORS[x],
-            key="gdp_supply_sectors_sel"
-        )
-        sabs = fseries(gdp_s, "abs").query("sector != 'p0'")
-        fig_s = go.Figure()
-        for code in sel_sectors:
-            lbl = GDP_SUPPLY_SECTORS[code]
-            sd = sabs.query(f"sector=='{code}'").sort_values("date").copy()
-            if sd.empty: continue
-            sd["quarter"] = sd["date"].dt.year.astype(str) + " Q" + sd["date"].dt.quarter.astype(str)
-            fig_s.add_trace(go.Scatter(x=sd["date"], y=sd["value"], mode="lines", stackgroup="one",
-                name=lbl, line=dict(width=0.5), customdata=sd["quarter"],
-                hovertemplate=f"<b>{lbl}</b><br>%{{customdata}}<br>RM %{{y:,.0f}}M<extra></extra>"))
-        fig_s = style(fig_s)
-        fig_s.update_layout(yaxis_title="RM million")
-        st.plotly_chart(fig_s, use_container_width=True)
+    # Supply
+    st.subheader("GDP by Sector")
+    sectors_opt = list(GDP_SUPPLY_SECTORS.items())[1:] # Exclude overall
+    sel_sectors = st.multiselect(
+        "Filter Sectors",
+        options=[k for k, v in sectors_opt],
+        default=[k for k, v in sectors_opt],
+        format_func=lambda x: GDP_SUPPLY_SECTORS[x],
+        key="gdp_supply_sectors_sel"
+    )
+    sabs = fseries(gdp_s, "abs").query("sector != 'p0'")
+    fig_s = go.Figure()
+    for code in sel_sectors:
+        lbl = GDP_SUPPLY_SECTORS[code]
+        sd = sabs.query(f"sector=='{code}'").sort_values("date").copy()
+        if sd.empty: continue
+        sd["quarter"] = sd["date"].dt.year.astype(str) + " Q" + sd["date"].dt.quarter.astype(str)
+        fig_s.add_trace(go.Scatter(x=sd["date"], y=sd["value"], mode="lines", stackgroup="one",
+            name=lbl, line=dict(width=0.5), customdata=sd["quarter"],
+            hovertemplate=f"<b>{lbl}</b><br>%{{customdata}}<br>RM %{{y:,.0f}}M<extra></extra>"))
+    fig_s = style(fig_s, 450)
+    fig_s.update_layout(yaxis_title="RM million")
+    st.plotly_chart(fig_s, use_container_width=True)
 
-    with col2:
-        st.subheader("GDP by Expenditure (Demand)")
-        dabs = fseries(gdp_d, "abs").query("type != 'e0'")
-        fig_d = go.Figure()
-        for code, lbl in list(GDP_DEMAND_TYPES.items())[1:]:
-            dd = dabs.query(f"type=='{code}'").sort_values("date").copy()
-            if dd.empty: continue
-            dd["quarter"] = dd["date"].dt.year.astype(str) + " Q" + dd["date"].dt.quarter.astype(str)
+    st.divider()
+
+    # Demand
+    st.subheader("GDP by Expenditure")
+    
+    comp_metric_d = st.radio(
+        "GDP by Expenditure Metric",
+        options=["Nominal Value", "YoY Growth (%)"],
+        horizontal=True,
+        key="gdp_demand_metric_sel",
+        label_visibility="collapsed"
+    )
+    
+    demand_opt = list(GDP_DEMAND_TYPES.items())
+    sel_demand = st.multiselect(
+        "Filter Components",
+        options=[k for k, v in demand_opt],
+        default=[k for k, v in demand_opt if k != "e0"],
+        format_func=lambda x: GDP_DEMAND_TYPES[x],
+        key="gdp_demand_components_sel"
+    )
+    
+    df_filtered = fseries(gdp_d, "abs" if comp_metric_d == "Nominal Value" else "growth_yoy")
+    fig_d = go.Figure()
+    for code in sel_demand:
+        lbl = GDP_DEMAND_TYPES[code]
+        dd = df_filtered.query(f"type=='{code}'").sort_values("date").copy()
+        if dd.empty: continue
+        dd["quarter"] = dd["date"].dt.year.astype(str) + " Q" + dd["date"].dt.quarter.astype(str)
+        
+        if comp_metric_d == "Nominal Value":
             fig_d.add_trace(go.Bar(x=dd["date"], y=dd["value"], name=lbl, customdata=dd["quarter"],
                 hovertemplate=f"<b>{lbl}</b><br>%{{customdata}}<br>RM %{{y:,.0f}}M<extra></extra>"))
-        fig_d = style(fig_d)
+        else:
+            fig_d.add_trace(go.Scatter(x=dd["date"], y=dd["value"], mode="lines+markers", name=lbl,
+                customdata=dd["quarter"], marker=dict(size=4),
+                hovertemplate=f"<b>{lbl}</b><br>%{{customdata}}<br>%{{y:.1f}}%<extra></extra>"))
+                
+    fig_d = style(fig_d, 450)
+    if comp_metric_d == "Nominal Value":
         fig_d.update_layout(barmode="relative", yaxis_title="RM million")
-        st.plotly_chart(fig_d, use_container_width=True)
+    else:
+        fig_d.update_layout(yaxis_title="YoY Growth (%)")
+        fig_d.add_hline(y=0, line_dash="dot", line_color=COLORS["muted"], opacity=0.4)
+    st.plotly_chart(fig_d, use_container_width=True)
 
     # Growth rates
     st.subheader("Sector Growth (YoY %)")
