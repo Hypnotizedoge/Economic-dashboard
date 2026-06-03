@@ -53,10 +53,14 @@ def style(fig: go.Figure, h: int = 420) -> go.Figure:
                     activecolor="#00D4AA",
                     font=dict(color="#FAFAFA", size=11),
                     bordercolor="rgba(0,212,170,0.15)",
-                    borderwidth=1
+                    borderwidth=1,
+                    y=1.14, # Position above the legend (vertically stacked)
+                    yanchor="bottom"
                 ),
                 rangeslider=dict(visible=True, thickness=0.08)
             )
+            # Increase top margin dynamically to avoid clipping the stacked range selector and legend
+            fig.update_layout(margin=dict(t=90))
     return fig
 
 
