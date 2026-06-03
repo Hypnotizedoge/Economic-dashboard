@@ -69,6 +69,16 @@ def load_historical_gdp() -> pd.DataFrame:
     return pd.DataFrame({"date": dates, "gdp_nominal": values}).sort_values("date").reset_index(drop=True)
 
 
+@st.cache_data(show_spinner=False)
+def load_fx_rates() -> pd.DataFrame:
+    """Load exchange rates from local FXrate.csv."""
+    csv_path = Path(__file__).parent / "FXrate.csv"
+    df = pd.read_csv(csv_path)
+    if "date" in df.columns:
+        df["date"] = pd.to_datetime(df["date"], dayfirst=True)
+    return df
+
+
 def fseries(df: pd.DataFrame, series: str = "abs") -> pd.DataFrame:
     """Filter by series column."""
     if "series" in df.columns:
