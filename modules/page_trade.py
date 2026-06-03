@@ -47,8 +47,20 @@ def render():
     st.plotly_chart(fig, use_container_width=True)
 
     # SITC composition
-    sitc_s = sitc.sort_values("date")
-    sitc_no = sitc_s[sitc_s["section"] != "overall"]
+    sitc_s = sitc.sort_values(["section", "date"]).copy()
+    sitc_s["exports_yoy"] = sitc_s.groupby("section")["exports"].pct_change(12) * 100
+    sitc_s["imports_yoy"] = sitc_s.groupby("section")["imports"].pct_change(12) * 100
+    
+    sitc_no = sitc_s[sitc_s["section"] != "overall"].copy()
+
+    st.subheader("SITC Composition Analysis")
+    comp_metric = st.radio(
+        "SITC Composition Metric",
+        options=["Nominal Value", "YoY Growth (%)"],
+        horizontal=True,
+        key="sitc_metric_sel",
+        label_visibility="collapsed"
+    )
 
     st.subheader("Export Composition by SITC (Time Series)")
     
@@ -66,18 +78,29 @@ def render():
     idx = 0
     for code in sel_sitc_cats:
         lbl = sitc_cats[code]
-        sd = sitc_no[sitc_no["section"] == code]
+        sd = sitc_no[sitc_no["section"] == code].sort_values("date")
         if sd.empty: continue
         color = COLOR_SEQ[idx % len(COLOR_SEQ)]
-        fig_pe.add_trace(go.Bar(
-            x=sd["date"], y=sd["exports"], name=lbl,
-            marker_color=color,
-            hovertemplate=f"<b>{lbl} (Export)</b><br>%{{x|%b %Y}}<br>RM %{{y:,.0f}}<extra></extra>"
-        ))
+        if comp_metric == "Nominal Value":
+            fig_pe.add_trace(go.Bar(
+                x=sd["date"], y=sd["exports"], name=lbl,
+                marker_color=color,
+                hovertemplate=f"<b>{lbl} (Export)</b><br>%{{x|%b %Y}}<br>RM %{{y:,.0f}}<extra></extra>"
+            ))
+        else:
+            fig_pe.add_trace(go.Scatter(
+                x=sd["date"], y=sd["exports_yoy"], mode="lines", name=lbl,
+                line=dict(color=color, width=2),
+                hovertemplate=f"<b>{lbl} (Export YoY)</b><br>%{{x|%b %Y}}<br>%{{y:.1f}}%<extra></extra>"
+            ))
         idx += 1
     fig_pe = style(fig_pe, 420)
-    fig_pe.update_yaxes(title_text="RM million")
-    fig_pe.update_layout(barmode="stack")
+    if comp_metric == "Nominal Value":
+        fig_pe.update_yaxes(title_text="RM")
+        fig_pe.update_layout(barmode="stack")
+    else:
+        fig_pe.update_yaxes(title_text="YoY Growth (%)")
+        fig_pe.add_hline(y=0, line_dash="dot", line_color=COLORS["muted"], opacity=0.4)
     st.plotly_chart(fig_pe, use_container_width=True)
 
     # 2. Import Composition Chart
@@ -86,18 +109,29 @@ def render():
     idx = 0
     for code in sel_sitc_cats:
         lbl = sitc_cats[code]
-        sd = sitc_no[sitc_no["section"] == code]
+        sd = sitc_no[sitc_no["section"] == code].sort_values("date")
         if sd.empty: continue
         color = COLOR_SEQ[idx % len(COLOR_SEQ)]
-        fig_pi.add_trace(go.Bar(
-            x=sd["date"], y=sd["imports"], name=lbl,
-            marker_color=color,
-            hovertemplate=f"<b>{lbl} (Import)</b><br>%{{x|%b %Y}}<br>RM %{{y:,.0f}}<extra></extra>"
-        ))
+        if comp_metric == "Nominal Value":
+            fig_pi.add_trace(go.Bar(
+                x=sd["date"], y=sd["imports"], name=lbl,
+                marker_color=color,
+                hovertemplate=f"<b>{lbl} (Import)</b><br>%{{x|%b %Y}}<br>RM %{{y:,.0f}}<extra></extra>"
+            ))
+        else:
+            fig_pi.add_trace(go.Scatter(
+                x=sd["date"], y=sd["imports_yoy"], mode="lines", name=lbl,
+                line=dict(color=color, width=2),
+                hovertemplate=f"<b>{lbl} (Import YoY)</b><br>%{{x|%b %Y}}<br>%{{y:.1f}}%<extra></extra>"
+            ))
         idx += 1
     fig_pi = style(fig_pi, 420)
-    fig_pi.update_yaxes(title_text="RM million")
-    fig_pi.update_layout(barmode="stack")
+    if comp_metric == "Nominal Value":
+        fig_pi.update_yaxes(title_text="RM")
+        fig_pi.update_layout(barmode="stack")
+    else:
+        fig_pi.update_yaxes(title_text="YoY Growth (%)")
+        fig_pi.add_hline(y=0, line_dash="dot", line_color=COLORS["muted"], opacity=0.4)
     st.plotly_chart(fig_pi, use_container_width=True)
 
     # YoY Growth
