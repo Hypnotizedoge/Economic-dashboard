@@ -1,7 +1,7 @@
 """Financial — BOP, FDI"""
 import streamlit as st
 import plotly.graph_objects as go
-from data_loader import load, latest, fmt, BOP_ACCOUNTS, load_fx_rates
+from data_loader import load, latest, fmt, BOP_ACCOUNTS, load_fx_rates, load_money_supply
 from theme import style, COLORS
 
 
@@ -70,6 +70,83 @@ def render():
     fig_b.update_layout(barmode="relative", yaxis_title="RM million")
     st.plotly_chart(fig_b, use_container_width=True)
 
+    # ── Money Supply Section ──────────────────────────────────────────────────
+    st.divider()
+    st.subheader("Monetary Aggregates (M1, M2 & M3)")
+    st.caption("Broad and narrow money aggregates of the financial system in Malaysia. M1 represents narrow money (currency and demand deposits); M2 includes M1 and quasi-money (savings, fixed deposits, etc.); M3 includes M2 and deposits placed with other banking institutions.")
+
+    try:
+        df_ms = load_money_supply().sort_values("date").copy()
+        
+        # Calculate YoY growth
+        df_ms["m1_yoy"] = df_ms["m1"].pct_change(12) * 100
+        df_ms["m2_yoy"] = df_ms["m2"].pct_change(12) * 100
+        df_ms["m3_yoy"] = df_ms["m3"].pct_change(12) * 100
+        
+        col_mode, col_sel = st.columns([1, 2])
+        with col_mode:
+            ms_mode = st.radio(
+                "Value Mode",
+                options=["Nominal Value", "YoY Growth (%)"],
+                horizontal=True,
+                key="ms_view_mode",
+                label_visibility="collapsed"
+            )
+            
+        with col_sel:
+            ms_choices = ["M1", "M2", "M3"]
+            sel_ms = st.multiselect(
+                "Select Aggregates",
+                options=ms_choices,
+                default=ms_choices,
+                key="ms_aggregates_sel",
+                label_visibility="collapsed"
+            )
+            
+        if sel_ms:
+            fig_ms = go.Figure()
+            ms_colors = {
+                "M1": COLORS["primary"],
+                "M2": COLORS["secondary"],
+                "M3": COLORS["accent1"]
+            }
+            
+            for agg in sel_ms:
+                col_name = agg.lower()
+                if ms_mode == "Nominal Value":
+                    y_vals = df_ms[col_name] / 1000.0  # Convert RM million to RM billion
+                    hover_fmt = f"<b>{agg}</b><br>%{{x|%b %Y}}<br>RM %{{y:,.2f}}B<extra></extra>"
+                else:
+                    col_yoy = f"{col_name}_yoy"
+                    y_vals = df_ms[col_yoy]
+                    hover_fmt = f"<b>{agg} (YoY)</b><br>%{{x|%b %Y}}<br>%{{y:.2f}}%<extra></extra>"
+                
+                valid_mask = y_vals.notna()
+                if not valid_mask.any():
+                    continue
+                    
+                fig_ms.add_trace(go.Scatter(
+                    x=df_ms.loc[valid_mask, "date"],
+                    y=y_vals.loc[valid_mask],
+                    mode="lines",
+                    name=agg,
+                    line=dict(color=ms_colors[agg], width=2.5),
+                    hovertemplate=hover_fmt
+                ))
+                
+            fig_ms = style(fig_ms, 420)
+            if ms_mode == "Nominal Value":
+                fig_ms.update_layout(yaxis_title="RM billion")
+            else:
+                fig_ms.update_layout(yaxis_title="YoY Growth (%)")
+                fig_ms.add_hline(y=0, line_dash="dot", line_color=COLORS["muted"], opacity=0.4)
+                
+            st.plotly_chart(fig_ms, use_container_width=True)
+        else:
+            st.info("Please select at least one aggregate to display.")
+    except Exception as e:
+        st.error(f"Error loading money supply: {e}")
+
     # ── Exchange Rates Section ──────────────────────────────────────────────────
     st.divider()
     st.subheader("Exchange Rates (MYR per Foreign Currency)")
@@ -90,23 +167,30 @@ def render():
         )
         
         # Toggle between raw rate and indexed rate (base = 100)
-        fx_mode = st.radio(
-            "View Mode",
-            options=["Raw Rate", "Indexed (Base = 100 on start date)"],
-            horizontal=True,
-            key="fx_view_mode",
-            label_visibility="collapsed"
-        )
+        col_mode, col_year = st.columns([3, 1])
+        with col_mode:
+            fx_mode = st.radio(
+                "View Mode",
+                options=["Raw Rate", "Indexed (Base = 100 on start date)"],
+                horizontal=True,
+                key="fx_view_mode",
+                label_visibility="collapsed"
+            )
         
         fx_filtered = fx.copy()
         if "Indexed" in fx_mode:
-            unique_years = sorted(list(fx["date"].dt.year.unique()))
-            base_year = st.selectbox(
-                "Select Indexing Start Year",
-                options=unique_years,
-                index=0,
-                key="fx_base_year_sel"
-            )
+            with col_year:
+                min_yr = int(fx["date"].dt.year.min())
+                max_yr = int(fx["date"].dt.year.max())
+                base_year = st.number_input(
+                    "Start Year",
+                    min_value=min_yr,
+                    max_value=max_yr,
+                    value=min_yr,
+                    step=1,
+                    format="%d",
+                    key="fx_base_year_input"
+                )
             fx_filtered = fx[fx["date"].dt.year >= base_year].copy()
         
         if sel_currencies:
