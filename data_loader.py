@@ -79,6 +79,52 @@ def load_fx_rates() -> pd.DataFrame:
     return df
 
 
+@st.cache_data(show_spinner=False)
+def load_money_supply() -> pd.DataFrame:
+    """Load Money Supply (M1, M2, M3) from Excel."""
+    xlsx = Path(__file__).parent / "Money supply.xlsx"
+    wb = openpyxl.load_workbook(xlsx, data_only=True)
+    ws = wb["1.3"]
+    dates = []
+    m1_vals = []
+    m2_vals = []
+    m3_vals = []
+    
+    current_year = None
+    for row in ws.iter_rows(min_row=11, max_row=ws.max_row, values_only=True):
+        val_year = row[0]
+        val_month = row[1]
+        
+        if val_year is not None:
+            try:
+                current_year = int(val_year)
+            except (ValueError, TypeError):
+                pass
+                
+        if val_month is not None and current_year is not None:
+            try:
+                month = int(val_month)
+                dt = pd.to_datetime(f"{current_year}-{month:02d}-01")
+                
+                m3 = float(row[3]) if row[3] is not None else None
+                m2 = float(row[4]) if row[4] is not None else None
+                m1 = float(row[5]) if row[5] is not None else None
+                
+                dates.append(dt)
+                m1_vals.append(m1)
+                m2_vals.append(m2)
+                m3_vals.append(m3)
+            except (ValueError, TypeError):
+                continue
+                
+    return pd.DataFrame({
+        "date": dates,
+        "m1": m1_vals,
+        "m2": m2_vals,
+        "m3": m3_vals
+    }).sort_values("date").reset_index(drop=True)
+
+
 def fseries(df: pd.DataFrame, series: str = "abs") -> pd.DataFrame:
     """Filter by series column."""
     if "series" in df.columns:
