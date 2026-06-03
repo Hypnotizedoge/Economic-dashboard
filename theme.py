@@ -6,13 +6,13 @@ import plotly.graph_objects as go
 
 COLORS = {
     "primary": "#00D4AA", "secondary": "#6C63FF", "accent1": "#FF6B6B",
-    "accent2": "#FFD93D", "accent3": "#4ECDC4", "accent4": "#FF8E53",
+    "accent2": "#FFD93D", "accent3": "#15803D", "accent4": "#FF8E53",
     "accent5": "#A78BFA", "accent6": "#F472B6", "text": "#FAFAFA",
     "muted": "#8B95A5", "grid": "#2A3040", "pos": "#00D4AA", "neg": "#FF6B6B",
 }
 
 COLOR_SEQ = [
-    "#00D4AA", "#6C63FF", "#FF6B6B", "#FFD93D", "#4ECDC4",
+    "#00D4AA", "#6C63FF", "#FF6B6B", "#FFD93D", "#15803D",
     "#FF8E53", "#A78BFA", "#F472B6", "#45B7D1", "#96CEB4",
 ]
 
