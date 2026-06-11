@@ -28,6 +28,7 @@ with col_nav:
             "Prices",
             "Trade",
             "Financial",
+            "Stock Indices",
         ],
         label_visibility="collapsed",
     )
@@ -49,3 +50,6 @@ elif page == "Trade":
 elif page == "Financial":
     from modules import page_financial
     page_financial.render()
+elif page == "Stock Indices":
+    from modules import page_stock_indices
+    page_stock_indices.render()
