@@ -3,10 +3,19 @@ import json
 import csv
 import datetime
 import os
+import sys
+import pandas as pd
+from pathlib import Path
+
+# Ensure script directory is in sys.path
+sys.path.append(str(Path(__file__).parent.resolve()))
 
 API_URL = "https://api.bnm.gov.my/public/exchange-rate"
 HEADERS = {
     "Accept": "application/vnd.BNM.API.v1+json",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+}
+YAHOO_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
 }
 
@@ -154,7 +163,7 @@ def update_exchange_rates():
         if records is None:
             # No data for this date (weekend / public holiday / API issue)
             skipped += 1
-            print(f"  {target_date}  — no data (weekend/holiday), skipped")
+            print(f"  {target_date}  - no data (weekend/holiday), skipped")
             continue
 
         new_row = _build_csv_row(csv_date_str, records)
@@ -165,7 +174,7 @@ def update_exchange_rates():
 
         existing_dates.add(csv_date_str)
         appended += 1
-        print(f"  {target_date}  — appended ✓")
+        print(f"  {target_date}  - appended [OK]")
 
         # Polite delay between API requests (avoid hammering the server)
         if len(dates_to_fetch) > 1:
@@ -300,12 +309,207 @@ def update_money_supply():
     except Exception as e:
         print(f"Error saving Excel file: {e}")
 
+def clean_price(val):
+    if pd.isna(val) or str(val).strip() in ("", "-"):
+        return float("nan")
+    return float(str(val).replace(",", "").replace('"', '').strip())
+
+def format_price(val):
+    if pd.isna(val) or val is None:
+        return ""
+    try:
+        return f"{float(val):,.2f}"
+    except:
+        return str(val)
+
+def format_volume(vol_val):
+    if vol_val is None or vol_val == 0 or pd.isna(vol_val):
+        return "-"
+    try:
+        val = float(vol_val)
+        if val >= 1e9:
+            return f"{val/1e9:.2f}B"
+        if val >= 1e6:
+            return f"{val/1e6:.2f}M"
+        if val >= 1e3:
+            return f"{val/1e3:.2f}K"
+        return str(int(val))
+    except:
+        return "-"
+
+def update_stock_index_csv(filename: str, ticker: str):
+    print(f"Updating stock index: {filename} ({ticker})")
+    csv_path = Path(__file__).parent / "Stock indices" / filename
+    if not csv_path.exists():
+        print(f"  Error: {filename} not found.")
+        return
+        
+    # Load existing CSV
+    df_existing = pd.read_csv(csv_path)
+    df_existing.columns = df_existing.columns.str.strip().str.replace('"', '')
+    
+    # Parse existing Dates
+    df_existing["ParsedDate"] = pd.to_datetime(df_existing["Date"], format="%m/%d/%Y", errors="coerce")
+    # Drop rows with invalid dates
+    df_existing = df_existing.dropna(subset=["ParsedDate"])
+    
+    # Find last date
+    last_date = df_existing["ParsedDate"].max()
+    today = datetime.date.today()
+    
+    # We want to fetch from 5 days before last_date to ensure overlap and correct change percentage calculation
+    start_date = last_date.date() - datetime.timedelta(days=5)
+    
+    period1 = int(datetime.datetime.combine(start_date, datetime.time.min).timestamp())
+    period2 = int(datetime.datetime.combine(today, datetime.time.max).timestamp())
+    
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?interval=1d&period1={period1}&period2={period2}"
+    req = urllib.request.Request(url, headers=YAHOO_HEADERS)
+    
+    try:
+        with urllib.request.urlopen(req, timeout=15) as response:
+            if response.getcode() != 200:
+                print(f"  Failed to fetch data for {ticker} (status {response.getcode()})")
+                return
+            body = response.read().decode("utf-8")
+            data = json.loads(body)
+            result = data["chart"]["result"][0]
+            timestamps = result.get("timestamp", [])
+            quote = result["indicators"]["quote"][0]
+    except Exception as e:
+        print(f"  Error fetching {ticker}: {e}")
+        return
+        
+    if not timestamps:
+        print(f"  No new data found for {ticker}.")
+        return
+        
+    new_rows = []
+    for i, ts in enumerate(timestamps):
+        date_val = datetime.datetime.fromtimestamp(ts).date()
+        o = quote["open"][i]
+        h = quote["high"][i]
+        l = quote["low"][i]
+        c = quote["close"][i]
+        v = quote["volume"][i] if ("volume" in quote and quote["volume"]) else 0
+        
+        if o is None or h is None or l is None or c is None:
+            continue
+            
+        new_rows.append({
+            "ParsedDate": pd.to_datetime(date_val),
+            "Price": float(c),
+            "Open": float(o),
+            "High": float(h),
+            "Low": float(l),
+            "Vol.": v
+        })
+        
+    if not new_rows:
+        print(f"  No valid trading days returned for {ticker}.")
+        return
+        
+    df_new = pd.DataFrame(new_rows)
+    
+    # Merge existing and new
+    # For existing, convert Price/Open/High/Low to float to clean and align
+    for col in ["Price", "Open", "High", "Low"]:
+        df_existing[col] = df_existing[col].apply(clean_price)
+    
+    # Drop duplicates by ParsedDate, keeping the new data
+    df_combined = pd.concat([df_existing, df_new], ignore_index=True)
+    df_combined = df_combined.drop_duplicates(subset=["ParsedDate"], keep="last")
+    
+    # Sort chronologically to compute Change % properly
+    df_combined = df_combined.sort_values("ParsedDate").reset_index(drop=True)
+    
+    # Recalculate Change %
+    df_combined["Change_Raw"] = df_combined["Price"].pct_change() * 100
+    
+    # Format columns for CSV
+    df_combined["Date"] = df_combined["ParsedDate"].dt.strftime("%m/%d/%Y")
+    df_combined["Price"] = df_combined["Price"].apply(format_price)
+    df_combined["Open"] = df_combined["Open"].apply(format_price)
+    df_combined["High"] = df_combined["High"].apply(format_price)
+    df_combined["Low"] = df_combined["Low"].apply(format_price)
+    
+    # Format Vol.
+    def format_vol_col(row):
+        val = row["Vol."]
+        if pd.isna(val) or val is None or val == "":
+            return "-"
+        try:
+            if isinstance(val, str) and any(c in val for c in ["M", "B", "K", "-"]):
+                return val
+            val_f = float(val)
+            if val_f == 0:
+                return "-"
+            if val_f >= 1e9:
+                return f"{val_f/1e9:.2f}B"
+            if val_f >= 1e6:
+                return f"{val_f/1e6:.2f}M"
+            if val_f >= 1e3:
+                return f"{val_f/1e3:.2f}K"
+            return str(int(val_f))
+        except:
+            return str(val)
+            
+    df_combined["Vol."] = df_combined.apply(format_vol_col, axis=1)
+    
+    def format_change_col(row):
+        val = row["Change_Raw"]
+        if pd.isna(val) or val is None:
+            orig_change = row.get("Change %")
+            if pd.notna(orig_change) and orig_change != "":
+                return orig_change
+            return "-"
+        return f"{val:.2f}%"
+        
+    df_combined["Change %"] = df_combined.apply(format_change_col, axis=1)
+    
+    # Keep only target columns
+    df_out = df_combined[["Date", "Price", "Open", "High", "Low", "Vol.", "Change %"]].copy()
+    
+    # Sort descending (newest first)
+    df_out = df_out.iloc[::-1]
+    
+    # Save to CSV
+    df_out.to_csv(csv_path, index=False, quoting=csv.QUOTE_NONNUMERIC)
+    print(f"  Successfully updated {filename}. Total rows: {len(df_out)}")
+
+def update_stock_indices():
+    INDEX_TICKERS = {
+        "FTSE Malaysia KLCI.csv":                        "^KLSE",
+        "Dow Jones Industrial Average Historical Data.csv": "^DJI",
+        "S&P 500.csv":                                   "^GSPC",
+        "NASDAQ Composite.csv":                          "^IXIC",
+        "FTSE 100 Historical Data.csv":                  "^FTSE",
+        "Euro Stoxx 50 Historical Data.csv":             "^STOXX50E",
+        "Nikkei 225.csv":                                "^N225",
+        "Hang Seng Index.csv":                           "^HSI",
+        "KOSPI Historical Data.csv":                     "^KS11",
+        "Shanghai Composite.csv":                        "000001.SS",
+        "TSX Composite.csv":                             "^GSPTSE",
+        "TSX Venture Composite.csv":                     "^CDNX",
+    }
+    
+    for filename, ticker in INDEX_TICKERS.items():
+        try:
+            update_stock_index_csv(filename, ticker)
+        except Exception as e:
+            print(f"Error updating {filename}: {e}")
+            
+
+
 def main():
     print("=== STARTING DAILY EXCHANGE RATES UPDATE ===")
     update_exchange_rates()
     print("\n=== STARTING MONTHLY MONEY SUPPLY UPDATE ===")
     update_money_supply()
+    print("\n=== STARTING DAILY STOCK INDICES UPDATE ===")
+    update_stock_indices()
     print("=== ALL UPDATES COMPLETED ===")
 
 if __name__ == "__main__":
     main()
+

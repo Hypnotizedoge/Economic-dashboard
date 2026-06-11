@@ -79,6 +79,7 @@ def load_fx_rates() -> pd.DataFrame:
     return df
 
 
+
 @st.cache_data(show_spinner=False)
 def load_money_supply() -> pd.DataFrame:
     """Load Money Supply (M1, M2, M3) from Excel."""
