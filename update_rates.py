@@ -26,103 +26,152 @@ def format_rate(rate_val):
     s = f"{rate_val:.8f}".rstrip('0').rstrip('.')
     return s
 
-def update_exchange_rates():
-    print(f"Fetching exchange rates from BNM Open API: {API_URL}")
-    req = urllib.request.Request(API_URL, headers=HEADERS)
-    try:
-        with urllib.request.urlopen(req, timeout=15) as response:
-            status = response.getcode()
-            if status != 200:
-                print(f"Failed to fetch data. HTTP Status: {status}")
-                return
-            body = response.read().decode('utf-8')
-            data = json.loads(body)
-    except Exception as e:
-        print(f"Error fetching rates from API: {e}")
-        return
-
-    # Check if we got data
-    records = data.get('data', [])
-    if not records:
-        print("No exchange rate records found in the API response.")
-        return
-
-    # Find the date of the rates (use the first record's rate date)
-    first_record = records[0]
-    rate_date_str = first_record.get('rate', {}).get('date')
-    if not rate_date_str:
-        print("Could not determine the rate date from the API response.")
-        return
-
-    # Parse YYYY-MM-DD to D/M/YYYY
-    try:
-        dt = datetime.datetime.strptime(rate_date_str, "%Y-%m-%d")
-        csv_date_str = f"{dt.day}/{dt.month}/{dt.year}"
-    except Exception as e:
-        print(f"Error parsing date '{rate_date_str}': {e}")
-        return
-
-    print(f"API Date: {rate_date_str} -> CSV Date: {csv_date_str}")
-
-    # Read existing dates from FXrate.csv
-    existing_dates = set()
+def _read_existing_dates() -> set:
+    """Read all dates already present in FXrate.csv."""
+    existing = set()
     if os.path.exists(CSV_FILE):
         with open(CSV_FILE, "r", encoding="utf-8") as f:
             reader = csv.reader(f)
-            # Skip header
-            next(reader, None)
+            next(reader, None)  # skip header
             for row in reader:
                 if row:
-                    existing_dates.add(row[0].strip())
+                    existing.add(row[0].strip())
+    return existing
 
-    if csv_date_str in existing_dates:
-        print(f"Rates for date {csv_date_str} are already present in {CSV_FILE}. Skipping append.")
-        return
 
-    # Map currency code to API entry
+def _find_last_csv_date(existing_dates: set) -> datetime.date | None:
+    """Parse all D/M/YYYY date strings and return the most recent as a date."""
+    parsed = []
+    for d in existing_dates:
+        try:
+            parsed.append(datetime.datetime.strptime(d, "%d/%m/%Y").date())
+        except ValueError:
+            # Also try single-digit day/month format (e.g. 1/6/2025)
+            try:
+                parts = d.split("/")
+                parsed.append(datetime.date(int(parts[2]), int(parts[1]), int(parts[0])))
+            except (ValueError, IndexError):
+                continue
+    return max(parsed) if parsed else None
+
+
+def _fetch_rates_for_date(target_date: datetime.date) -> list | None:
+    """Fetch exchange-rate records from BNM API for a specific date.
+    Returns the list of currency records, or None on failure / no data.
+    """
+    date_str = target_date.strftime("%Y-%m-%d")
+    url = f"{API_URL}?date={date_str}"
+    req = urllib.request.Request(url, headers=HEADERS)
+    try:
+        with urllib.request.urlopen(req, timeout=15) as response:
+            if response.getcode() != 200:
+                return None
+            body = response.read().decode("utf-8")
+            data = json.loads(body)
+            records = data.get("data", [])
+            return records if records else None
+    except Exception:
+        return None
+
+
+def _build_csv_row(csv_date_str: str, records: list) -> list:
+    """Build a CSV row from BNM API records for a given date."""
     rate_map = {}
     for record in records:
-        code = record.get('currency_code')
+        code = record.get("currency_code")
         if code:
             rate_map[code] = record
 
-    # Build the new row starting with date and rate_type
     new_row = [csv_date_str, "middle"]
-
     for col_currency in CURRENCIES:
-        # XDR in CSV header maps to SDR in BNM API
         lookup_code = "SDR" if col_currency == "XDR" else col_currency
         entry = rate_map.get(lookup_code)
-        
+
         rate_str = ""
         if entry:
-            rate_info = entry.get('rate', {})
-            middle_rate = rate_info.get('middle_rate')
-            unit = entry.get('unit', 1)
-            
+            rate_info = entry.get("rate", {})
+            middle_rate = rate_info.get("middle_rate")
+            unit = entry.get("unit", 1)
             if middle_rate is not None:
                 try:
                     normalized_rate = float(middle_rate) / float(unit)
                     rate_str = format_rate(normalized_rate)
                 except (ValueError, TypeError) as e:
-                    print(f"Error processing rate for {lookup_code}: {e}")
-        
-        new_row.append(rate_str)
+                    print(f"  Error processing rate for {lookup_code}: {e}")
 
-    # Append to CSV file safely ensuring trailing newline exists
+        new_row.append(rate_str)
+    return new_row
+
+
+def _ensure_trailing_newline():
+    """Make sure FXrate.csv ends with a newline before appending."""
     if os.path.exists(CSV_FILE):
-        # Ensure file ends with newline
         with open(CSV_FILE, "rb+") as f:
             f.seek(0, 2)
             if f.tell() > 0:
                 f.seek(-1, 2)
-                if f.read(1) != b'\n':
-                    f.write(b'\n')
+                if f.read(1) != b"\n":
+                    f.write(b"\n")
 
-    with open(CSV_FILE, "a", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        writer.writerow(new_row)
-        print(f"Successfully appended rates for {csv_date_str} to {CSV_FILE}.")
+
+def update_exchange_rates():
+    import time
+
+    print(f"Exchange rate source: BNM Open API ({API_URL})")
+
+    # 1. Read existing dates and find the last one
+    existing_dates = _read_existing_dates()
+    last_date = _find_last_csv_date(existing_dates)
+    today = datetime.date.today()
+
+    if last_date is None:
+        # No data at all — just fetch today's rate
+        print("No existing dates found in CSV. Fetching today's rate only.")
+        dates_to_fetch = [today]
+    elif last_date >= today:
+        print(f"CSV is already up-to-date (last entry: {last_date}). Nothing to fetch.")
+        return
+    else:
+        # Build list of all missing dates from (last_date + 1) to today
+        gap_days = (today - last_date).days
+        dates_to_fetch = [last_date + datetime.timedelta(days=i) for i in range(1, gap_days + 1)]
+        print(f"Last CSV date: {last_date}  |  Today: {today}  |  {len(dates_to_fetch)} day(s) to backfill")
+
+    # 2. Fetch and append each missing date
+    appended = 0
+    skipped = 0
+
+    _ensure_trailing_newline()
+
+    for target_date in dates_to_fetch:
+        csv_date_str = f"{target_date.day}/{target_date.month}/{target_date.year}"
+
+        # Skip if already in CSV (safety check)
+        if csv_date_str in existing_dates:
+            continue
+
+        records = _fetch_rates_for_date(target_date)
+        if records is None:
+            # No data for this date (weekend / public holiday / API issue)
+            skipped += 1
+            print(f"  {target_date}  — no data (weekend/holiday), skipped")
+            continue
+
+        new_row = _build_csv_row(csv_date_str, records)
+
+        with open(CSV_FILE, "a", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(new_row)
+
+        existing_dates.add(csv_date_str)
+        appended += 1
+        print(f"  {target_date}  — appended ✓")
+
+        # Polite delay between API requests (avoid hammering the server)
+        if len(dates_to_fetch) > 1:
+            time.sleep(0.5)
+
+    print(f"Exchange rates done: {appended} day(s) appended, {skipped} day(s) skipped (no data).")
 
 def safe_float(val):
     if val is None:
